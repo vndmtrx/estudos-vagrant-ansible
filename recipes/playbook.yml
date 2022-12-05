@@ -1,0 +1,47 @@
+- hosts: all
+  become: true
+  
+  tasks:
+  - name: Atualiza a máquina
+    dnf:
+      name: "*"
+      state: latest
+    register: dnf_update
+  
+  - name: Remove dependências não usadas
+    dnf:
+      autoremove: yes
+    when: dnf_update.changed
+  
+  - name: Verifica necessidade de reboot
+    command: /usr/bin/needs-restarting -r
+    register: reiniciar
+    ignore_errors: true
+    changed_when: false
+    failed_when: false
+  
+  - name: Reboot após atualização das dependências
+    reboot:
+    when: reiniciar.rc == 1
+  
+  - name: Instala Cockpit
+    dnf:
+      name: "cockpit"
+      state: present
+  
+  - name: Garante que o serviço Cockpit está habilitado
+    systemd:
+      name: cockpit.socket
+      enabled: yes
+      masked: no
+
+  - name: Garante que o serviço Cockpit está rodando
+    systemd:
+      name: cockpit.socket
+      state: started
+
+  - name: Libera tráfego na zona padrão para o serviço Cockpit
+    firewalld:
+      service: cockpit
+      permanent: yes
+      state: enabled
